@@ -689,6 +689,7 @@ pseudo_op(pseudo_msg_t *msg, const char *program, const char *tag, char **respon
 			 * should be against the old name, though!
 			 */
 			int mismatch = 0;
+			int raced = 0;
 			switch (msg->op) {
 			case OP_LINK:
 			case OP_EXEC:
@@ -696,6 +697,26 @@ pseudo_op(pseudo_msg_t *msg, const char *program, const char *tag, char **respon
 			case OP_RENAME:
 				if (msg->nlink == 1 && strcmp(oldpath, path_by_ino)) {
 					mismatch = 1;
+				}
+				break;
+			case OP_STAT:
+				/* A path-based stat reports whichever inode the
+				 * kernel found, but the path was resolved a
+				 * moment before that.  In a parallel build the
+				 * two instants can disagree: a symlink in the
+				 * path gets replaced in between, and the inode
+				 * which comes back belongs to a file known under
+				 * another name.  The inode is the thing that was
+				 * actually examined, so answer from its entry
+				 * instead of killing a client which has only
+				 * asked a question.  A nameless entry is left
+				 * to the handling below, since it is this
+				 * inode's own entry rather than another name
+				 * for it.
+				 */
+				if (strcmp(msg->path, path_by_ino) &&
+				    strcmp(path_by_ino, "NAMELESS FILE")) {
+					raced = 1;
 				}
 				break;
 			case OP_CREAT:
@@ -722,7 +743,12 @@ pseudo_op(pseudo_msg_t *msg, const char *program, const char *tag, char **respon
 				}
 				break;
 			}
-			if (mismatch) {
+			if (raced) {
+				pseudo_debug(PDBGF_FILE, "stat of '%s' landed on ino %llu, in db as '%s'; using the inode\n",
+					msg->path, (unsigned long long) msg_header.ino,
+					path_by_ino);
+				prefer_ino = 1;
+			} else if (mismatch) {
 				if (by_ino.deleting != 0) {
 					/* a mismatch, likely a race but we were planning to
 					 * delete the file, or are in the middle of a rename
