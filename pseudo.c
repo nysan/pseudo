@@ -678,8 +678,9 @@ pseudo_op(pseudo_msg_t *msg, const char *program, const char *tag, char **respon
 		} else if (msg->pathlen && path_by_ino) {
 			/* this suggests a database error, except in LINK
 			 * cases.  In those cases, it is normal for a
-			 * mismatch to occur.  :)  (SYMLINK shouldn't,
-			 * because the symlink gets its own inode number.)
+			 * mismatch to occur.  :)  Creation ops are also
+			 * expected to hit it, because inode numbers are
+			 * reused the moment a file is deleted.
 			 *
 			 * RENAME can get false positives on this, when
 			 * link count is greater than one.  So we skip this
@@ -696,6 +697,23 @@ pseudo_op(pseudo_msg_t *msg, const char *program, const char *tag, char **respon
 				if (msg->nlink == 1 && strcmp(oldpath, path_by_ino)) {
 					mismatch = 1;
 				}
+				break;
+			case OP_CREAT:
+			case OP_MKDIR:
+			case OP_MKNOD:
+			case OP_SYMLINK:
+				/* These ops report something the kernel has just
+				 * created, so it has only now assigned this
+				 * inode to this path.  An entry holding the same
+				 * inode under another name therefore describes a
+				 * file which was deleted and had its inode
+				 * number handed straight back out, which is
+				 * routine as soon as two processes delete and
+				 * create in one directory.  Each of these ops
+				 * clears such an entry out in its own case
+				 * below, so all that is needed here is to stop
+				 * calling it a database error.
+				 */
 				break;
 			default:
 				/* Ignore NAMELESS FILE entries since those could be created by other threads on new files */
