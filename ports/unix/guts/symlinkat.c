@@ -38,11 +38,24 @@
 #endif
 	if (rc == -1) {
 		int save_errno = errno;
-		pseudo_warning("symlinkat: couldn't stat '%s' even though symlink creation succeeded (%s).\n",
-			newpath, strerror(errno));
-		errno = save_errno;
+		/* The symlink was created; the call has succeeded and saying
+		 * otherwise would fail an operation which actually happened.
+		 * Another process removing or replacing the new symlink before
+		 * we can look at it is ordinary in a parallel build, and there
+		 * is nothing left to record: whoever removed it reports that
+		 * removal itself.  Anything other than the link having gone is
+		 * unexpected enough to be worth saying out loud.
+		 */
+		if (save_errno != ENOENT)
+			pseudo_warning(
+				"symlinkat: couldn't stat '%s' even though symlink creation succeeded (%s).\n",
+				newpath, strerror(save_errno));
+		else
+			pseudo_debug(PDBGF_OP, "symlinkat: '%s' was gone before it could be recorded\n",
+				newpath);
 		free(roldname);
-		return rc;
+		errno = save_errno;
+		return 0;
 	}
 	/* just record the entry */
 	pseudo_client_op(OP_SYMLINK, 0, -1, dirfd, newpath, &buf);
