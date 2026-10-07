@@ -255,6 +255,8 @@ pseudo_server_start(int daemonize) {
 		exit(PSEUDO_EXIT_LOCK_PATH);
 	}
 	mkdir_p(lockpath);
+	free(lockpath);
+	lockpath = NULL;
 	lockname = pseudo_localstatedir_path(PSEUDO_LOCKFILE);
 	if (!lockname) {
 		pseudo_error("Couldn't allocate a file path.\n");
