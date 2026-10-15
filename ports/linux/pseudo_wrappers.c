@@ -54,6 +54,10 @@ int pseudo_capset(cap_user_header_t hdrp, const cap_user_data_t datap) {
 	return 0;
 }
 
+#ifdef PSEUDO_HAVE_IO_URING_SYSCALLS
+#include "pseudo_io_uring_seccomp.c"
+#endif
+
 long
 syscall(long number, ...) {
 	long rc = -1;
@@ -108,6 +112,11 @@ syscall(long number, ...) {
         if (pseudo_disabled) {
                 goto call_syscall;
         }
+
+	/* io_uring is not handled here.  It is refused by the seccomp filter
+	 * in ports/linux/pseudo_io_uring_seccomp.c, which also catches the
+	 * callers that issue the syscall instruction themselves and would
+	 * never reach this wrapper. */
 
 #ifdef SYS_openat2
 	/* There is a CVE patch (CVE-2025-45582) to tar 1.34 in Centos Stream which

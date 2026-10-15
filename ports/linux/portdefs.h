@@ -106,3 +106,5 @@ extern int unshare(int flags);
 
 #define SYS_open_tree_attr __NR_open_tree_attr
 #endif
+
+#include "io_uring_syscalls.h"
