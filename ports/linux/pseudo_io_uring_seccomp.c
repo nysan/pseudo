@@ -35,8 +35,41 @@
  */
 
 #include <sys/prctl.h>
-#include <linux/filter.h>
-#include <linux/seccomp.h>
+
+/* The kernel headers the filter is built from, and the only <linux/...> this
+ * file needs.  They are optional, because a filter cannot be written without
+ * them: where they are absent none is installed and io_uring reaches the
+ * kernel unexamined, which is what an architecture missing from the list
+ * below gets as well.  A build is not failed over it.
+ *
+ * All three are asked for together because all three are needed before
+ * anything can be built - the architecture value from audit.h, the
+ * instruction macros and sock_fprog from filter.h, seccomp_data's layout from
+ * seccomp.h - and because they arrive together, one package carrying the lot.
+ *
+ * The test is nested rather than written as one expression because a compiler
+ * without __has_include cannot parse a use of it: the identifier expands to 0
+ * and the rest of the line is then a syntax error, whatever a || in front of
+ * it might suggest.  Where there is nothing to ask with, the headers are
+ * assumed present - they are wherever pseudo builds at all, portdefs.h having
+ * required <linux/seccomp.h> since 2020 - rather than dropping the filter on
+ * every compiler older than the question.
+ */
+#if defined(__has_include)
+# if __has_include(<linux/audit.h>) && \
+     __has_include(<linux/filter.h>) && \
+     __has_include(<linux/seccomp.h>)
+#  define PSEUDO_HAVE_SECCOMP_HEADERS 1
+# endif
+#else
+# define PSEUDO_HAVE_SECCOMP_HEADERS 1
+#endif
+
+#ifdef PSEUDO_HAVE_SECCOMP_HEADERS
+# include <linux/audit.h>
+# include <linux/filter.h>
+# include <linux/seccomp.h>
+#endif
 
 #ifndef SECCOMP_MODE_FILTER
 #define SECCOMP_MODE_FILTER 2
@@ -84,10 +117,7 @@
  * for both endiannesses too.  So a big-endian build matches on the same
  * constant as a little-endian one, and there is nothing to exclude.
  */
-#if !defined(__has_include) || __has_include(<linux/audit.h>)
-#include <linux/audit.h>
-#endif
-
+#ifdef PSEUDO_HAVE_SECCOMP_HEADERS
 #if defined(__x86_64__) && !defined(__ILP32__) && defined(AUDIT_ARCH_X86_64)
 #define PSEUDO_SECCOMP_AUDIT_ARCH AUDIT_ARCH_X86_64
 #elif defined(__i386__) && defined(AUDIT_ARCH_I386)
@@ -99,6 +129,7 @@
 #elif defined(__riscv) && __riscv_xlen == 64 && defined(AUDIT_ARCH_RISCV64)
 #define PSEUDO_SECCOMP_AUDIT_ARCH AUDIT_ARCH_RISCV64
 #endif
+#endif /* PSEUDO_HAVE_SECCOMP_HEADERS */
 
 /* The variable which picks the mode, and the two markers pseudo carries in
  * its own environment.  The filter marker stops the thousands of processes in
